@@ -1,68 +1,90 @@
-# === このファイルの責務（GPT用構造補助） ===
-# 本ファイルは「マッピングルールの適用処理」を担う
-# 保存処理は data_saver.py に委譲され、本モジュールはDataFrameを構築して渡すのみとする
-
 import pandas as pd
-from data_saver import save_circus_db, validate_df_structure
-from datetime import datetime
+import os
+import csv
+from tkinter import messagebox
 
 class MappingError(Exception):
+    """マッピング処理中に発生するエラー"""
     pass
 
-def validate_rule(rule, row):
+def validate_rule(rule, company_columns):
+    """ルールが正しく適用できるかを検証する"""
     for circus_col, company_col_template in rule.items():
         if company_col_template:
             try:
-                company_col_template.format(**row)
-            except KeyError:
-                raise MappingError(f"テンプレート '{company_col_template}' に必要な列が存在しません。")
+                company_col_template.format(**{col: "" for col in company_columns})
+            except KeyError as e:
+                raise MappingError(f"ルール '{circus_col}' に無効な企業dbカラム '{e}' が含まれています。") from e
+            except ValueError as e:
+                raise MappingError(f"ルール '{circus_col}' の形式が正しくありません: {e}") from e
 
-def apply_rule(rule, row):
-    new_data = {}
+def apply_rule(company_row, rule, for_preview=False):
+    """ルールを適用して新しいCircusDBのデータ行を生成する"""
+    new_circus_row = {}
     for circus_col, company_col_template in rule.items():
         if company_col_template:
             try:
-                new_data[circus_col] = company_col_template.format(**row)
-            except KeyError:
-                new_data[circus_col] = ""
+                new_circus_row[circus_col] = company_col_template.format(**company_row)
+            except KeyError as e:
+                if for_preview:
+                    new_circus_row[circus_col] = ""
+                else:
+                    raise MappingError(f"企業db.csv に '{e.args[0]}' カラムが存在しません。") from e  # KeyErrorが発生した場合、エラーメッセージにカラム名を含める
+            
         else:
-            new_data[circus_col] = ""
-    return new_data
+            new_circus_row[circus_col] = ""
+    return new_circus_row
+
+def load_mapping_rules(mapping_path, company_name, management_number):
+    """マッピングルールを読み込む"""
+    mapping_rules = []
+    try:
+        with open(mapping_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row['企業名'] == company_name and row['管理番号の文字列'] == management_number:
+                    mapping_rules.append({
+                        col: row[col] for col in reader.fieldnames if col not in ["No.", "企業名", "管理番号の文字列"]
+                    })
+    except FileNotFoundError as e:
+        raise MappingError(f"マッピングルールファイルが見つかりません: {e}") from e  # MappingErrorでラップして再送出
+    except Exception as e:
+        raise MappingError(f"マッピングルールの読み込み中にエラーが発生しました: {e}") from e  # MappingErrorでラップして再送出
+    return mapping_rules
 
 def execute_mapping(company_name, management_number, rule, company_db_path):
+    """マッピング処理を実行"""
     try:
         df_company = pd.read_csv(company_db_path, encoding="utf-8-sig")
-    except FileNotFoundError:
-        raise MappingError(f"{company_db_path} が見つかりません。")
-    except Exception as e:
-        raise MappingError(f"企業データ読み込み中にエラー: {e}")
+        validate_rule(rule, df_company.columns) 
 
-    if df_company.empty:
-        raise MappingError("企業データが空です。")
+        df_circus = pd.read_csv("circus_db.csv", encoding="utf-8-sig")
+        processed_count = 0
 
-    try:
-        validate_rule(rule, df_company.iloc[0])
-    except MappingError as e:
-        raise e
+        for _, company_row in df_company.iterrows():
+            if management_number in str(company_row['管理番号']):
+                new_circus_row = apply_rule(company_row, rule)
+                new_circus_row['企業名'] = company_name
+                new_circus_row['管理番号'] = company_row['管理番号']
+                df_circus = pd.concat([df_circus, pd.DataFrame([new_circus_row])], ignore_index=True)
+                processed_count += 1
 
-    new_row = apply_rule(rule, df_company.iloc[0])
-    new_row["企業名"] = company_name
-    new_row["管理番号"] = management_number
-    return pd.DataFrame([new_row])
+        df_circus.to_csv("circus_db.csv", index=False, encoding="utf-8-sig")
+        print(f"{processed_count} 件のデータをマッピングしました。")  
 
-def execute_mapping_with_rules(company_name, management_number, rules, company_db_path, selected_rule_index):
-    if selected_rule_index < 0 or selected_rule_index >= len(rules):
-        raise MappingError("有効なルールが選択されていません。")
+    except (FileNotFoundError, ValueError, KeyError) as e:
+        raise MappingError(f"マッピング中にエラーが発生しました: {e}") from e  # MappingErrorでラップして再送出
 
-    selected_rule = rules[selected_rule_index]
-    df_circus = execute_mapping(company_name, management_number, selected_rule, company_db_path)
 
-    # メタデータ付加
-    metadata = {
-        "ルールNo.": selected_rule_index + 1,
-        "マッピング識別": f"{company_name}_{management_number}",
-        "マッピング日時": datetime.now().isoformat()
-    }
+def execute_mapping_with_rules(company_name, management_number, rules, company_db_path, selected_tab_index=0):
+    """選択されたルールでマッピング処理を実行"""
+    selected_rule = rules[selected_tab_index] if selected_tab_index < len(rules) else None
 
-    validate_df_structure(df_circus)
-    save_circus_db(df_circus, overwrite_keys=("企業名", "管理番号"), metadata=metadata)
+    if selected_rule:
+        try:
+            execute_mapping(company_name, management_number, selected_rule, company_db_path)
+            messagebox.showinfo("成功", "マッピングが完了しました。")
+        except MappingError as e:  # MappingErrorをキャッチ
+            messagebox.showerror("エラー", f"マッピング中にエラーが発生しました: {e}") # エラーメッセージを表示
+    else:
+        raise MappingError("ルールが選択されていません。")

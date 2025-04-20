@@ -28,6 +28,12 @@ CIRCUS_DB_FILE = "circus_db.csv"
 class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit であることを確認
     def __init__(self, parent):
         super().__init__(parent)  # Frame の初期化
+        
+        # 親フレームに自身を配置 - 適切な配置オプションを使用
+        self.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        
+        # pack_propagateをFalseに設定して、親フレームのサイズに影響されないようにする
+        self.pack_propagate(False)
 
         # circus_db.csv を読み込む
         try:
@@ -52,12 +58,12 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
             "成果報酬金額": {"width": 40, "height": 2},
             "支払いサイト": {"width": 40, "height": 2},
             "返戻金規定": {"width": 80, "height": 3},
-
         }
 
         # メインフレーム（スクロール対応）
-        main_frame = tk.Frame(parent)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # parentではなく自身(self)の子としてmain_frameを作成
+        main_frame = tk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         canvas = tk.Canvas(main_frame)
         scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
@@ -107,7 +113,7 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
             "福利厚生・諸手当": ["福利厚生・諸手当"],
             "求める人材": ["応募時必須条件"],
             "手数料設定": ["成果報酬金額", "支払いサイト", "返戻金規定"],
-}
+        }
         self.entries = {}
 
         # _資料エリアに対応するテキストボックスを直接指定
@@ -115,7 +121,7 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
             "募集概要_資料", "勤務地・勤務時間_資料", "給与・賞与_資料",
             "休日・休暇_資料", "福利厚生・諸手当_資料", "求める人材_資料",
             "手数料設定_資料"
-]
+        ]
 
         for block, fields in self.blocks.items():
             block_frame = tk.LabelFrame(scrollable_frame, text=block, font=("Arial", 12, "bold"), padx=5, pady=5, relief=tk.GROOVE, borderwidth=2)
@@ -195,7 +201,6 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
 
                 self.entries[field] = entry  # self.entries に entry を追加
 
-
         # 入力区分（チェックボタン）
         input_status_frame = tk.Frame(scrollable_frame)
         input_status_frame.pack(fill=tk.X, pady=5)
@@ -214,6 +219,21 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
         tk.Label(url_frame, text="Circus URL:").pack(side=tk.LEFT, padx=5)
         self.circus_url_entry = tk.Entry(url_frame, width=80)
         self.circus_url_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        # 関連URL 表示欄
+        related_url_frame = tk.Frame(scrollable_frame)
+        related_url_frame.pack(fill=tk.X, pady=5)
+        tk.Label(related_url_frame, text="関連URL:").pack(side=tk.LEFT, padx=5)
+        entry_related_url = tk.Entry(related_url_frame, width=80)
+        entry_related_url.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.entries["関連URL"] = entry_related_url
+
+        # 関連HP 表示欄
+        related_hp_frame = tk.Frame(scrollable_frame)
+        related_hp_frame.pack(fill=tk.X, pady=5)
+        tk.Label(related_hp_frame, text="関連HP:").pack(side=tk.LEFT, padx=5)
+        entry_related_hp = tk.Entry(related_hp_frame, width=80)
+        entry_related_hp.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.entries["関連HP"] = entry_related_hp
 
         # ボタンエリア
         button_frame = tk.Frame(scrollable_frame)
@@ -264,20 +284,19 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
 
     def search_record(self):
         # 検索条件を取得
-        # search_id = self.search_id_entry.get().strip()  # 削除
         company_name = self.company_entry.get().strip()
-        management_number = self.management_number_entry.get().strip() # 追加
+        management_number = self.management_number_entry.get().strip() 
 
         try:
             # circus_db.csv を読み込む
             df = pd.read_csv("circus_db.csv", encoding="utf-8-sig")
 
-           # 検索条件でデータをフィルタリング
+            # 検索条件でデータをフィルタリング
             df = df.fillna("")  # NaN を空文字に変換
             filtered_df = df[
                 (df["管理番号"].astype(str) == str(management_number)) &  # 管理番号を str に変換
                 (df["企業名"].astype(str).isin([str(company_name)]))  # 企業名を str に変換
-]
+            ]
 
             # 該当するデータがあれば、入力エリアに表示
             if not filtered_df.empty:
@@ -286,11 +305,8 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
 
                 # 入力エリアに値を設定
                 for field, entry in self.entries.items():
-
-                    # _資料エリアにも値を設定
-                    # field が _資料 で終わる場合、対応する entry に値を設定
-                    # if field.endswith("_資料") and field in record: # この部分を修正
-                    if field in self.material_fields and field in record: # material_fields に含まれるフィールドのみ更新
+                    # material_fields に含まれるフィールドのみ更新
+                    if field in self.material_fields and field in record:
                         entry.delete("1.0", tk.END)  # 既存の内容をクリア
                         entry.insert("1.0", str(record.get(field, "")))  # 新しい値を設定 (文字列に変換)
 
@@ -301,30 +317,9 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
                             value = str(value)
                         entry.delete("1.0", tk.END)  # 既存の内容をクリア
                         entry.insert("1.0", value)  # 新しい値を設定 (文字列に変換)
-                    else:
-                        # 該当データがない場合、新規入力として処理
-                        messagebox.showinfo("新規入力", "該当するデータがありません。新規入力として処理します。")
-
-                        # 新規データを作成
-                        new_data = {
-                            "企業名": company_name,
-                            "管理番号": management_number,
-                        }
-
-                        # その他のフィールドに初期値を設定
-                        for column in df.columns:  # 既存のヘッダーからカラム名を取得
-                            if column not in new_data:  # 企業名と管理番号以外は初期値を設定
-                                new_data[column] = "（入力待ち）"
-
-                        # circus_db.csv に追記
-                        try:
-                            with open("circus_db.csv", "a", encoding="utf-8-sig", newline="") as f:
-                                writer = csv.DictWriter(f, fieldnames=df.columns)  # 既存のヘッダーを使用
-                                writer.writerow(new_data)  # 新規データを追加
-                            messagebox.showinfo("保存完了", "新規データが circus_db.csv に保存されました。")
-                        except Exception as e:
-                            messagebox.showerror("エラー", f"保存中にエラーが発生しました: {e}")
-
+                    elif isinstance(entry, tk.Entry) and field in record:
+                        entry.delete(0, tk.END)  # Entryウィジェットの場合の既存内容クリア方法
+                        entry.insert(0, str(record.get(field, "")))  # Entryに値を設定
 
                 # 入力状態を設定
                 for status, var in self.input_status_vars.items():
@@ -335,7 +330,28 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
                 self.circus_url_entry.insert(0, record.get("Circus URL", ""))
 
             else:
-                messagebox.showinfo("検索", "該当するデータがありません")
+                # 該当データがない場合、新規入力として処理
+                messagebox.showinfo("新規入力", "該当するデータがありません。新規入力として処理します。")
+
+                # 新規データを作成
+                new_data = {
+                    "企業名": company_name,
+                    "管理番号": management_number,
+                }
+
+                # その他のフィールドに初期値を設定
+                for column in df.columns:  # 既存のヘッダーからカラム名を取得
+                    if column not in new_data:  # 企業名と管理番号以外は初期値を設定
+                        new_data[column] = "（入力待ち）"
+
+                # circus_db.csv に追記
+                try:
+                    with open("circus_db.csv", "a", encoding="utf-8-sig", newline="") as f:
+                        writer = csv.DictWriter(f, fieldnames=df.columns)  # 既存のヘッダーを使用
+                        writer.writerow(new_data)  # 新規データを追加
+                    messagebox.showinfo("保存完了", "新規データが circus_db.csv に保存されました。")
+                except Exception as e:
+                    messagebox.showerror("エラー", f"保存中にエラーが発生しました: {e}")
 
         except FileNotFoundError:
             messagebox.showerror("エラー", "circus_db.csv が見つかりません")
@@ -346,7 +362,10 @@ class CircusDB_viewer_edit(tk.Frame):  # クラス名が CircusDB_viewer_edit �
         # 入力内容を取得
         data = {}
         for field, entry in self.entries.items():
-            data[field] = entry.get("1.0", tk.END).strip()
+            if isinstance(entry, tk.Text):
+                data[field] = entry.get("1.0", tk.END).strip()
+            elif isinstance(entry, tk.Entry):
+                data[field] = entry.get().strip()
 
         # 管理番号、入力状態、Circus URL を取得
         data["管理番号"] = self.management_number_entry.get().strip()

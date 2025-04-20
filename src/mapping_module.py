@@ -8,6 +8,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import sys
+from mapping_processor import execute_mapping_with_rules
 import mapping_processor
 
 # circusDB_viewer_edit.py ファイルのパスを追加
@@ -88,7 +89,7 @@ class MappingToolUI(tk.Frame):
         for tab_id in self.preview_notebook.tabs():
             self.preview_notebook.forget(tab_id)
 
-        self.rules = mapping_processor.load_mapping_rules(self.mapping_path, company_name, management_number)
+        self.rules = load_mapping_rules(self.mapping_path, company_name, management_number)
 
         from circusDB_viewer_edit import CircusDB_viewer_edit
 
@@ -133,11 +134,25 @@ class MappingToolUI(tk.Frame):
 
     def select_company_db(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        self.company_db_path = file_path
         if file_path:
             self.selected_file_label.config(text=f"選択されたファイル: {file_path}")
             self.show_preview(self.company_entry.get(), self.management_number_entry.get())
 
+        execute_mapping_with_rules(
+            company_name=self.company_entry.get(),
+            management_number=self.management_number_entry.get(),
+            rules=self.rules,
+            company_db_path=self.company_db_path,
+            selected_rule_index=0,
+            save=False
+        )
     def confirm_rule(self):
+        management_number = self.management_number_entry.get()
+        company_name = self.company_entry.get()
+        management_number = self.management_number_entry.get()
+        company_db_file = f"{company_name}_db.csv"
+        company_db_path = os.path.join("data", company_db_file)
         company_name = self.company_entry.get()
         management_number = self.management_number_entry.get()
         company_db_file = f"{company_name}_db.csv"
@@ -167,3 +182,10 @@ def load_mapping_rules(mapping_path, company_name, management_number):
     except Exception as e:
         print(f"Error loading mapping rules: {e}")
     return mapping_rules
+
+# 追加：ルール読み込み関数（mapping_processor側に未定義のため）
+def load_mapping_rules(mapping_path, company_name, management_number):
+    import csv
+    with open(mapping_path, mode='r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        return [row for row in reader if row['企業名'] == company_name and row['管理番号の文字列'] == management_number]

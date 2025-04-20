@@ -19,7 +19,7 @@ def validate_df_structure(df):
     if missing:
         raise ValueError(f"circus_db.csv に必要な列が不足しています: {missing}")
 
-def save_circus_db(new_rows_df, circus_db_path="circus_db.csv", metadata=None):
+def save_circus_db(new_rows_df, circus_db_path="circus_db.csv", metadata=None, overwrite_keys=None):
     try:
         df_circus = pd.read_csv(circus_db_path, encoding='utf-8')
     except FileNotFoundError:
@@ -34,10 +34,43 @@ def save_circus_db(new_rows_df, circus_db_path="circus_db.csv", metadata=None):
             for key, value in metadata.items():
                 row_copy[key] = value
 
-        mask = (df_circus['企業名'] == row_copy['企業名']) & (df_circus['管理番号'] == row_copy['管理番号'])
+        if overwrite_keys:
+            mask = pd.Series(True, index=df_circus.index)
+            for key in overwrite_keys:
+                mask &= (df_circus[key] == row_copy.get(key, ''))
+        else:
+            mask = (df_circus['企業名'] == row_copy['企業名']) & (df_circus['管理番号'] == row_copy['管理番号'])
         duplicate_rows = df_circus[mask]
-        if not ((duplicate_rows == row_copy).all(axis=1).any()):
+        duplicate_rows, aligned_row = duplicate_rows.align(row_copy, axis=1, copy=False)
+        if not ((duplicate_rows == aligned_row).all(axis=1).any()):
             df_circus = df_circus[~mask]
             df_circus = pd.concat([df_circus, pd.DataFrame([row_copy])], ignore_index=True)
 
+    print("[DEBUG] 保存対象の管理番号頻度:")
+    print(new_rows_df[['企業名', '管理番号']].value_counts().head(10))
+    print("[DEBUG] 保存後DataFrame先頭:")
+    print(df_circus.head())
     df_circus.to_csv(circus_db_path, index=False, encoding='utf-8')
+    print(f"[DEBUG] 保存後データ行数: {len(df_circus)}")
+
+
+def save_to_file(mapping_data: dict, path: str = 'circus_db_mapping.csv'):
+    import csv
+    import os
+
+    if not mapping_data:
+        return
+
+    # 最初のデータのキー順でフィールド名を固定
+    first_row = next(iter(mapping_data.values()), {})
+    fieldnames = list(first_row.keys())
+
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+
+    with open(path, mode='w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in mapping_data.values():
+            writer.writerow(row)
